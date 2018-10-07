@@ -15,29 +15,85 @@
  */
 package net.mobileapplab.android.app.simplerawaudio
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat.*
 import android.media.MediaRecorder.AudioSource.MIC
 import android.os.Bundle
+import android.support.v4.app.ActivityCompat
+import android.support.v4.content.ContextCompat
 import android.support.v7.app.AppCompatActivity
-import android.view.View
-import android.widget.TextView
 import kotlinx.android.synthetic.main.activity_main.*
+import kotlinx.android.synthetic.main.content_main.*
 import net.mobileapplab.simplerawaudio.SimpleRawAudioPlayer
 import net.mobileapplab.simplerawaudio.SimpleRawAudioRecorder
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var recorder: SimpleRawAudioRecorder
-    private lateinit var player: SimpleRawAudioPlayer
+    companion object {
+        private const val AUDIO_REQUEST_CODE = 0
+    }
+
+    private var recorder: SimpleRawAudioRecorder? = null
+    private var player: SimpleRawAudioPlayer? = null
+
+    private lateinit var path: String
+    private val sampleRate = 44100
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val path = "$filesDir${File.separator}tmp.pcm"
-        val sampleRate = 44100
+        path = "$filesDir${File.separator}tmp.pcm"
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO),
+                    AUDIO_REQUEST_CODE)
+        } else {
+            initPlayer()
+            initRecorder()
+        }
+
+        start.setOnClickListener {
+            recorder?.startRecording()
+        }
+
+        stop.setOnClickListener {
+            recorder?.stopRecording()
+        }
+
+        fab.setOnClickListener { _ ->
+            player?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                } else {
+                    it.play()
+                }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        when (requestCode) {
+            AUDIO_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    initPlayer()
+                    initRecorder()
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+
+        recorder?.release()
+        player?.release()
+    }
+
+    private fun initRecorder() {
         recorder = SimpleRawAudioRecorder.Builder()
                 .sampleRate(sampleRate)
                 .audioSource(MIC)
@@ -49,15 +105,9 @@ class MainActivity : AppCompatActivity() {
                     updateVolumeText(db)
                 }
                 .build()
+    }
 
-        findViewById<View>(R.id.start).setOnClickListener {
-            recorder.startRecording()
-        }
-
-        findViewById<View>(R.id.stop).setOnClickListener {
-            recorder.stopRecording()
-        }
-
+    private fun initPlayer() {
         val attributes = AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -81,27 +131,11 @@ class MainActivity : AppCompatActivity() {
                     }
                 })
                 .build()
-
-        fab.setOnClickListener {
-            if (player.isPlaying) {
-                player.stop()
-            } else {
-                player.play()
-            }
-        }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-
-        recorder.release()
-        player.release()
-    }
-
-    private fun updateVolumeText(db: Double) {
+    private fun updateVolumeText(volumeDb: Double) {
         runOnUiThread {
-            val textView = findViewById<TextView>(R.id.db)
-            textView.text = String.format("%1$2.1f", db)
+            db.text = String.format("%1$2.1f", volumeDb)
         }
     }
 }
